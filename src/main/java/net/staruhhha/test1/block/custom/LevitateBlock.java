@@ -11,54 +11,84 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.SimpleWaterloggedBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Material;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import net.staruhhha.test1.block.ModBlocks;
-import net.staruhhha.test1.block.custom.tile.LevitateBlockTile;
+import net.staruhhha.test1.block.ModTiles;
+import net.staruhhha.test1.block.tile.LevitationBlockTile;
+import net.staruhhha.test1.utils.TickerUtils;
 
-public class LevitateBlock extends Block implements EntityBlock, SimpleWaterloggedBlock {
+import javax.annotation.Nullable;
+
+public class LevitateBlock extends Block implements EntityBlock {
 
 
     public LevitateBlock() {
         super(Block.Properties.of(Material.STONE)
                 .strength(1f));
-        registerDefaultState(defaultBlockState().setValue(BlockStateProperties.WATERLOGGED, false));
     }
 
     @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult result) {
-        if (hand != InteractionHand.MAIN_HAND)
-            return InteractionResult.PASS;
-        if (!level.isClientSide && level.getBlockEntity(pos) instanceof LevitateBlockTile tile) {
-            if (tile.getStack() != null && player.getItemInHand(hand).isEmpty()) {
-                ItemEntity item = new ItemEntity(level, player.getX(), player.getY(), player.getZ(), tile.getStack());
-                level.addFreshEntity(item);
-                tile.setStack(ItemStack.EMPTY);
-            } else if (!player.getInventory().getSelected().isEmpty()) {
-                if (tile.getStack() != null) {
-                    ItemEntity item = new ItemEntity(level, player.getX(), player.getY(), player.getZ(), tile.getStack());
-                    level.addFreshEntity(item);
-                }
-                tile.setStack(player.getInventory().removeItem(player.getInventory().selected, 1));
-            }
-            level.sendBlockUpdated(pos, state, state, 2);
+    public void onRemove(BlockState state, Level worldIn, BlockPos pos, BlockState newState, boolean isMoving) {
+        if (!state.is(newState.getBlock()) && worldIn.getBlockEntity(pos) instanceof LevitationBlockTile tile) {
+            ItemStack stack = tile.getStack();
+
+            if (stack != null && !stack.isEmpty())
+                worldIn.addFreshEntity(new ItemEntity(worldIn, pos.getX(), pos.getY(), pos.getZ(), stack));
         }
-        return InteractionResult.SUCCESS;
-        //return super.use(state, level, pos, player, hand, result);
+
+        super.onRemove(state, worldIn, pos, newState, isMoving);
     }
 
+    @Nullable
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        return TickerUtils.getTicker(type, ModTiles.LEVITATION_BLOCK_TILE.get(), LevitationBlockTile::tick);
+    }
+
+    @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new LevitateBlockTile(pos, state);
+        return new LevitationBlockTile(pos, state);
     }
 
-    @Override
-    public void playerWillDestroy(Level worldIn, BlockPos pos, BlockState state, Player player) {
-        super.playerWillDestroy(worldIn, pos, state, player);
-        if (worldIn.getBlockEntity(pos) instanceof LevitateBlockTile tile && tile.getStack() != null) {
-            worldIn.addFreshEntity(new ItemEntity(worldIn, pos.getX(), pos.getY(), pos.getZ(), tile.getStack()));
+    @Mod.EventBusSubscriber
+    public static class Events {
+        @SubscribeEvent
+        public static void onBlockRightClick(PlayerInteractEvent.RightClickBlock event) {
+            InteractionHand hand = event.getHand();
+
+            if (hand != InteractionHand.MAIN_HAND)
+                return;
+
+            Level level = event.getLevel();
+            BlockPos pos = event.getPos();
+
+            if (!(level.getBlockEntity(pos) instanceof LevitationBlockTile tile))
+                return;
+
+            Player player = event.getEntity();
+
+            ItemStack handStack = player.getMainHandItem();
+            ItemStack tileStack = tile.getStack();
+
+            BlockState oldState = level.getBlockState(pos);
+
+            if (tileStack.isEmpty()){
+                tile.setStack(handStack.split(1));
+            }
+
+            tile.setChanged();
+
+            level.sendBlockUpdated(pos, oldState, level.getBlockState(pos), 3);
         }
     }
+
 }

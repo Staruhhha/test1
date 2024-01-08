@@ -24,7 +24,8 @@ public class Test1Mod
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         ModItems.register(modEventBus);
-        ModBlocks.register(modEventBus);
+        ModBlocks.register();
+
 
 
         modEventBus.addListener(this::commonSetup);
